@@ -12,4 +12,9 @@
    7. Print the 10 most frequent words across cohort
 3. Potential improvements:
    1. Fine tune default rate limit values
-   2. Divide project into packages
+   2. Wait and retry upon 999 error code from article server
+   3. Divide project into packages
+   4. More configurability:
+      1. Use a config file
+      2. Parameterize elements you're looking for in an html (instead of the hardcoding that's specific to the example domain)
+      3. Parameterize url list and word bank

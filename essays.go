@@ -25,7 +25,7 @@ var errEssayUnavailable = errors.New("unable to retrieve essay from provided url
 
 type essayCollector struct {
 	urlbank     []string
-	rps         int
+	rpm         int
 	routines    int
 	destination chan *html.Node
 }
@@ -139,19 +139,19 @@ func (ec *essayCollector) retrieveHTMLEssays(ctx context.Context, debug bool) {
 	}()
 
 	wg := sync.WaitGroup{}
-	limiter := rate.NewLimiter(rate.Every(1*time.Second), ec.rps)
+	limiter := rate.NewLimiter(rate.Every(time.Minute/time.Duration(ec.rpm)), 1)
 
 	for i := 0; i < ec.routines; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for u := range urlsChan {
-				// error is returned if and only if the context is cancelled.
+				// error is returned if the context is cancelled.
 				if err := limiter.Wait(ctx); err != nil {
 					return
 				}
 				if debug {
-					fmt.Printf("[DEBUG] Requesting article %s from remote server\n", u)
+					log.Printf("[DEBUG] Requesting article %s from remote server\n", u)
 				}
 				h, err := urlToHTML(u)
 				if err != nil {

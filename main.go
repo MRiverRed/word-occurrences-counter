@@ -14,9 +14,9 @@ import (
 func main() {
 	// optional - use flags to customise use case.
 	routineCount := flag.Int("routines", runtime.NumCPU(),
-		"Number of concurrent goroutines for a specific task. If not specified, number of logical CPUs will be used as a baseline")
-	rps := flag.Int("rps", 10, "Request per seconds to the website that host the article. Default: 10")
-	debug := flag.Bool("debug", false, "Display debug messages")
+		"Number of concurrent goroutines for a specific task. If not specified, number of logical CPUs will be used as a default")
+	rpm := flag.Int("rpm", 90, "Request per minute to the website that hosts the article")
+	debug := flag.Bool("debug", false, "Display debug messages (default: false)")
 	flag.Parse()
 
 	// initialize word bank consisting of valid words
@@ -45,7 +45,7 @@ func main() {
 
 	ec := essayCollector{
 		urlbank:     urls,
-		rps:         *rps,
+		rpm:         *rpm,
 		routines:    *routineCount,
 		destination: htmls,
 	}
