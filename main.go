@@ -13,10 +13,10 @@ import (
 
 func main() {
 	// optional - use flags to customise use case.
-	routineCount := *flag.Int("routines", runtime.NumCPU(),
+	routineCount := flag.Int("routines", runtime.NumCPU(),
 		"Number of concurrent goroutines for a specific task. If not specified, number of logical CPUs will be used as a baseline")
-	rps := *flag.Int("rps", 10, "Request per seconds to the website that host the article. Default: 10")
-	debug := *flag.Bool("debug", false, "Display debug messages")
+	rps := flag.Int("rps", 10, "Request per seconds to the website that host the article. Default: 10")
+	debug := flag.Bool("debug", false, "Display debug messages")
 	flag.Parse()
 
 	// initialize word bank consisting of valid words
@@ -38,18 +38,18 @@ func main() {
 	}
 
 	// get htmls using the essayCollector
-	htmls := make(chan *html.Node, routineCount*5)
+	htmls := make(chan *html.Node, *routineCount*5)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	ec := essayCollector{
 		urlbank:     urls,
-		rps:         rps,
-		routines:    routineCount,
+		rps:         *rps,
+		routines:    *routineCount,
 		destination: htmls,
 	}
-	go ec.retrieveHTMLEssays(ctx, debug)
+	go ec.retrieveHTMLEssays(ctx, *debug)
 
 	// wait until the word bank is ready
 	<-wordBankReady
@@ -57,7 +57,7 @@ func main() {
 	// parse html and count words in every article and return to intermediate maps
 	parser := &htmlParser{
 		wordbank:   wb,
-		routines:   routineCount,
+		routines:   *routineCount,
 		htmlStream: htmls,
 	}
 

@@ -151,11 +151,11 @@ func (ec *essayCollector) retrieveHTMLEssays(ctx context.Context, debug bool) {
 					return
 				}
 				if debug {
-					fmt.Printf("Requesting article %s from remote server", u)
+					fmt.Printf("[DEBUG] Requesting article %s from remote server\n", u)
 				}
 				h, err := urlToHTML(u)
 				if err != nil {
-					log.Printf("[Warning] Skipping the following essay url due to an error: %s\n", err)
+					log.Printf("[WARNING] Skipping the following essay url due to an error: %s\n", err)
 					continue
 				}
 				ec.destination <- h
