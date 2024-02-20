@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -20,6 +22,13 @@ const (
 )
 
 var errEssayUnavailable = errors.New("unable to retrieve essay from provided url")
+
+type essayCollector struct {
+	urlbank     []string
+	rps         int
+	routines    int
+	destination chan *html.Node
+}
 
 type worker struct {
 	wordbank        map[string]struct{}
@@ -90,7 +99,7 @@ func (w *worker) extractParagraphs(n *html.Node) {
 	if n.Type == html.ElementNode && n.Data == "p" {
 		// Extract text content from this paragraph
 		text := w.extractText(n)
-		// Filter out invalid words
+		// Count occurrences of valid words
 		w.filterAndCount(text)
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -119,53 +128,66 @@ func (w *worker) filterAndCount(s string) {
 	}
 }
 
-func retrieveHTMLEssays(urls []string, htmls chan *html.Node) {
-	// estimated allowed request per second to the domain
-	// hosting the articles
-	// rps := 1000
-	// requestCount := 0
-
-	urlToHTML := func(url string) (*html.Node, error) {
-		resp, err := http.Get(url)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errEssayUnavailable, err)
+func (ec *essayCollector) retrieveHTMLEssays(ctx context.Context, debug bool) {
+	// push urls to channel, so they can be consumed by http client
+	urlsChan := make(chan string, ec.routines*5)
+	go func() {
+		for _, v := range ec.urlbank {
+			urlsChan <- v
 		}
-		// requestCount++
+		close(urlsChan)
+	}()
 
-		defer resp.Body.Close()
+	wg := sync.WaitGroup{}
+	limiter := rate.NewLimiter(rate.Every(1*time.Second), ec.rps)
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("%w. url: %s; response code: %s", errEssayUnavailable, url, resp.Status)
-		}
-
-		// Parse HTML
-		doc, err := html.Parse(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read essay: %w", err)
-		}
-		return doc, nil
+	for i := 0; i < ec.routines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for u := range urlsChan {
+				// error is returned if and only if the context is cancelled.
+				if err := limiter.Wait(ctx); err != nil {
+					return
+				}
+				if debug {
+					fmt.Printf("Requesting article %s from remote server", u)
+				}
+				h, err := urlToHTML(u)
+				if err != nil {
+					log.Printf("[Warning] Skipping the following essay url due to an error: %s\n", err)
+					continue
+				}
+				ec.destination <- h
+			}
+		}()
 	}
 
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for _, u := range urls {
-		// check if exceeded limit. If so - wait another second.
-		// if requestCount == rps {
-		// 	<-ticker.C
-		// 	requestCount = 0
-		// }
-		h, err := urlToHTML(u)
-		if err != nil {
-			log.Printf("[Warning] Skipping the following essay url due to an error: %s\n", err)
-			continue
-		}
-		htmls <- h
-	}
-	close(htmls)
+	wg.Wait()
+	close(ec.destination)
 }
 
-// parse htmls
+func urlToHTML(url string) (*html.Node, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errEssayUnavailable, err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w. url: %s; response code: %s", errEssayUnavailable, url, resp.Status)
+	}
+
+	// Parse HTML
+	doc, err := html.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read essay: %w", err)
+	}
+	return doc, nil
+}
+
+// dispatch workers to parse and count words in the htmls sent to them
 func (p *htmlParser) parseAndCount() ([]map[string]int, error) {
 	wg := sync.WaitGroup{}
 	results := make([]map[string]int, p.routines)

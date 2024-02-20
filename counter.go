@@ -2,7 +2,8 @@ package main
 
 import "sort"
 
-func TenMostOccurred(input []map[string]int) map[string]int {
+// combine maps received by workers to create single map. sort it and return top ten results.
+func tenMostOccurred(input []map[string]int) map[string]int {
 	unifiedMap := make(map[string]int)
 
 	// Iterate over each map in the input slice

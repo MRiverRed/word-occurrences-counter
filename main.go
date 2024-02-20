@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,9 +12,11 @@ import (
 )
 
 func main() {
-	// optional - get the number of concurrent routines from the user.
+	// optional - use flags to customise use case.
 	routineCount := *flag.Int("routines", runtime.NumCPU(),
 		"Number of concurrent goroutines for a specific task. If not specified, number of logical CPUs will be used as a baseline")
+	rps := *flag.Int("rps", 10, "Request per seconds to the website that host the article. Default: 10")
+	debug := *flag.Bool("debug", false, "Display debug messages")
 	flag.Parse()
 
 	// initialize word bank consisting of valid words
@@ -34,9 +37,20 @@ func main() {
 		log.Fatalf("unable to populate url bank: %s", err)
 	}
 
-	// get htmls
+	// get htmls using the essayCollector
 	htmls := make(chan *html.Node, routineCount*5)
-	go retrieveHTMLEssays(urls, htmls)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ec := essayCollector{
+		urlbank:     urls,
+		rps:         rps,
+		routines:    routineCount,
+		destination: htmls,
+	}
+	go ec.retrieveHTMLEssays(ctx, debug)
+
 	// wait until the word bank is ready
 	<-wordBankReady
 
@@ -52,9 +66,9 @@ func main() {
 		log.Fatalf("unable to parse and count essays: %w", err)
 	}
 
-	// unite maps
+	// unite maps and display result to user
 	message := "Top 10 words that occurred the most in the provided articles:\n"
-	result := TenMostOccurred(intermediateMaps)
+	result := tenMostOccurred(intermediateMaps)
 	jsonResult, err := json.MarshalIndent(result, "", "  ")
 	if err == nil {
 		fmt.Println(message + string(jsonResult))
